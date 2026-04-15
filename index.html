@@ -546,6 +546,7 @@
                     selectedVoice: 'auto',
                     currentVoiceName: '自动优选',
                     sexyVoice: null,
+                    speechWoken: false,
 
                     statusMessage: '就绪，点击开始',
 
@@ -726,7 +727,12 @@
                             this.currentVoiceName = '不支持语音';
                             return;
                         }
-                        window.speechSynthesis.getVoices();
+                        this.currentVoiceName = '语音准备中...';
+                        window.speechSynthesis.onvoiceschanged = () => this.updateVoiceSelection();
+                        const voices = window.speechSynthesis.getVoices();
+                        if (voices && voices.length > 0) {
+                            this.updateVoiceSelection();
+                        }
                         setTimeout(() => this.updateVoiceSelection(), 500);
                     },
 
@@ -753,7 +759,29 @@
                             this.sexyVoice = selected;
                             this.currentVoiceName = selected.name;
                         } else {
+                            this.sexyVoice = null;
                             this.currentVoiceName = '使用默认声音';
+                        }
+                    },
+
+                    wakeSpeech() {
+                        if (!window.speechSynthesis || this.speechWoken) return;
+                        try {
+                            const test = new SpeechSynthesisUtterance('语音已激活');
+                            test.lang = 'zh-CN';
+                            test.rate = 1;
+                            test.pitch = 1;
+                            if (this.sexyVoice) test.voice = this.sexyVoice;
+                            test.onend = () => {
+                                this.speechWoken = true;
+                            };
+                            test.onerror = () => {
+                                this.speechWoken = true;
+                            };
+                            window.speechSynthesis.speak(test);
+                        } catch (e) {
+                            console.warn('唤醒语音失败', e);
+                            this.speechWoken = true;
                         }
                     },
 
@@ -795,7 +823,11 @@
                         utterance.lang = 'zh-CN';
                         utterance.rate = 0.9;
                         utterance.pitch = 1.1;
-                        if (this.sexyVoice) utterance.voice = this.sexyVoice;
+                        if (this.sexyVoice) {
+                            utterance.voice = this.sexyVoice;
+                        } else {
+                            utterance.voice = null;
+                        }
 
                         utterance.onend = () => {
                             if (this.isBroadcasting) {
@@ -818,10 +850,14 @@
                             return;
                         }
 
+                        this.wakeSpeech();
                         if (this.broadcastInterval) clearInterval(this.broadcastInterval);
 
-                        if (this.currentPrice !== null) this.speakRound();
-                        else this.statusMessage = '等待价格数据...';
+                        if (this.currentPrice !== null) {
+                            this.speakRound();
+                        } else {
+                            this.statusMessage = '等待价格数据...';
+                        }
 
                         this.broadcastInterval = setInterval(() => {
                             this.speakRound();
