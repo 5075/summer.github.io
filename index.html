@@ -662,7 +662,7 @@
                         }
 
                         const streamName = `${this.currentSymbol.toLowerCase()}@markPrice`;
-                        const WS_URL = `wss://fstream.binance.com/stream?streams=${streamName}`;
+                        const WS_URL = `wss://fstream.binance.com/market/stream?streams=${streamName}`;
 
                         try {
                             this.socket = new WebSocket(WS_URL);
