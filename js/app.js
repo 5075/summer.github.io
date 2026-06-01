@@ -31,6 +31,11 @@ function initializeApp() {
             silentMin: null,
             silentMax: null,
 
+            // 时间范围 (东八区)
+            timeRangeStartTime: null,
+            timeRangeEndTime: null,
+            timeRangeEnabled: false,
+
             // 播报开关
             speakEnabled: true,
 
@@ -96,6 +101,14 @@ function initializeApp() {
                 const savedMax = localStorage.getItem('silent_max');
                 if (savedMin !== null) this.silentMin = parseFloat(savedMin);
                 if (savedMax !== null) this.silentMax = parseFloat(savedMax);
+
+                // 时间范围
+                const savedStartTime = localStorage.getItem('time_range_start');
+                const savedEndTime = localStorage.getItem('time_range_end');
+                const savedTimeEnabled = localStorage.getItem('time_range_enabled');
+                if (savedStartTime !== null) this.timeRangeStartTime = savedStartTime;
+                if (savedEndTime !== null) this.timeRangeEndTime = savedEndTime;
+                if (savedTimeEnabled !== null) this.timeRangeEnabled = savedTimeEnabled === 'true';
 
                 // 播报开关
                 const savedSpeak = localStorage.getItem('speak_enabled');
@@ -297,11 +310,47 @@ function initializeApp() {
             shouldSpeak() {
                 if (!this.speakEnabled) return false;
                 if (this.currentPrice === null) return false;
+
+                // 检查时间范围是否启用且在范围内
+                if (this.timeRangeEnabled && this.timeRangeStartTime && this.timeRangeEndTime) {
+                    if (this.isCurrentTimeInRange()) {
+                        // 在时间范围内，忽略价格范围直接播报
+                        return true;
+                    }
+                }
+
+                // 否则按照原有的价格范围逻辑
                 if (this.silentMin === null || this.silentMax === null) return true; // 没设区间就播报
                 if (this.silentMin >= this.silentMax) return true; // 无效区间也播报
 
                 // 价格在区间内 -> 不播报；在区间外 -> 播报
                 return !(this.currentPrice >= this.silentMin && this.currentPrice <= this.silentMax);
+            },
+
+            // 检查当前东八区时间是否在指定范围内
+            isCurrentTimeInRange() {
+                if (!this.timeRangeStartTime || !this.timeRangeEndTime) return false;
+
+                // 获取当前东八区时间
+                const now = new Date();
+                // 使用 UTC 时间 + 8 小时得到东八区时间
+                const utcHours = now.getUTCHours();
+                const utcMinutes = now.getUTCMinutes();
+                
+                let utc8Hours = utcHours + 8;
+                let utc8Minutes = utcMinutes;
+                
+                if (utc8Hours >= 24) {
+                    utc8Hours -= 24;
+                }
+
+                // 格式化为 HH:mm
+                const currentTime = `${String(utc8Hours).padStart(2, '0')}:${String(utc8Minutes).padStart(2, '0')}`;
+                const startTime = this.timeRangeStartTime;
+                const endTime = this.timeRangeEndTime;
+
+                // 比较时间字符串（因为都是 HH:mm 格式，可以直接比较）
+                return currentTime >= startTime && currentTime <= endTime;
             },
 
             // 播报一轮
@@ -392,6 +441,31 @@ function initializeApp() {
                 }
             },
 
+            // 启用时间范围
+            enableTimeRange() {
+                if (!this.timeRangeStartTime || !this.timeRangeEndTime) {
+                    this.$message.warning('请先设置开始时间和结束时间');
+                    return;
+                }
+                if (this.timeRangeStartTime >= this.timeRangeEndTime) {
+                    this.$message.error('开始时间必须早于结束时间');
+                    return;
+                }
+                
+                this.timeRangeEnabled = true;
+                localStorage.setItem('time_range_start', this.timeRangeStartTime);
+                localStorage.setItem('time_range_end', this.timeRangeEndTime);
+                localStorage.setItem('time_range_enabled', 'true');
+                this.$message.success(`时间范围已启用: ${this.timeRangeStartTime} - ${this.timeRangeEndTime}`);
+            },
+
+            // 停止时间范围
+            stopTimeRange() {
+                this.timeRangeEnabled = false;
+                localStorage.setItem('time_range_enabled', 'false');
+                this.$message.success('时间范围已停止');
+            },
+
             saveSettings() {
                 localStorage.setItem('interval_seconds', this.intervalSeconds.toString());
                 localStorage.setItem('selected_voice', this.selectedVoice);
@@ -410,6 +484,9 @@ function initializeApp() {
             },
             speakEnabled(val) {
                 localStorage.setItem('speak_enabled', val);
+            },
+            timeRangeEnabled(val) {
+                localStorage.setItem('time_range_enabled', val);
             }
         },
 

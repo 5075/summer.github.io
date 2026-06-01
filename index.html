@@ -24,77 +24,126 @@
             </div>
         </div>
 
-        <!-- 合约输入区 -->
-        <div class="symbol-input-section">
-            <div class="input-group">
-                <el-input placeholder="输入币安交易对，例如 btcusdt" v-model="inputSymbol" @keyup.enter="applySymbol" clearable>
-                </el-input>
-                <el-button type="primary" @click="applySymbol">切换</el-button>
-            </div>
-            <div class="hint-text">
-                ⚡ 输入永续合约交易对（如 ethusdt, xauusdt, xagusdt, lynusdt），自动匹配币安实时数据
-            </div>
-            <div v-if="currentSymbol" class="current-symbol-badge">
-                当前监控: {{ currentSymbol.toUpperCase() }}
-            </div>
-        </div>
-
-        <!-- 价格卡片 (只显示当前合约) -->
-        <div class="price-item" v-if="currentSymbol">
-            <div class="symbol">{{ currentSymbol.toUpperCase() }}</div>
-            <div class="value">{{ formatPrice }}</div>
-            <div class="time">{{ lastTime }}</div>
-
-            <!-- 静默区间设置 (取代原来的开仓/幅度) -->
-            <div class="silent-area">
-                <div class="area-title">
-                    <i>🔇</i> 静默区间 (价格在此区间内不播报)
-                </div>
-                <div class="range-input-row">
-                    <div class="input-item">
-                        <label>最低价</label>
-                        <input type="number" step="0.00001" :min="0" placeholder="例如 0.25" v-model.number="silentMin"
-                            @change="saveSilentRange">
+        <!-- 主内容区域：左右两列 -->
+        <div class="main-content">
+            <!-- 左列：交易对、价格、按钮 -->
+            <div class="left-column">
+                <!-- 合约输入区 -->
+                <div class="symbol-input-section">
+                    <div class="input-group">
+                        <el-input placeholder="输入币安交易对，例如 btcusdt" v-model="inputSymbol" @keyup.enter="applySymbol"
+                            clearable>
+                        </el-input>
+                        <el-button type="primary" @click="applySymbol">切换</el-button>
                     </div>
-                    <div class="input-item">
-                        <label>最高价</label>
-                        <input type="number" step="0.00001" :min="0" placeholder="例如 0.35" v-model.number="silentMax"
-                            @change="saveSilentRange">
+                    <div class="hint-text">
+                        ⚡ 输入永续合约交易对（如 ethusdt, xauusdt, xagusdt, lynusdt），自动匹配币安实时数据
+                    </div>
+                    <div v-if="currentSymbol" class="current-symbol-badge">
+                        当前监控: {{ currentSymbol.toUpperCase() }}
                     </div>
                 </div>
-                <div class="silent-hint" v-if="silentMin !== null && silentMax !== null && silentMin < silentMax">
-                    <i>🔕</i> 当价格 ≥ {{ formatSilent(silentMin) }} 且 ≤ {{ formatSilent(silentMax) }} 时保持静默
+
+                <!-- 价格卡片 (只显示当前合约) -->
+                <div class="price-item" v-if="currentSymbol">
+                    <div class="symbol">{{ currentSymbol.toUpperCase() }}</div>
+                    <div class="value">{{ formatPrice }}</div>
+                    <div class="time">{{ lastTime }}</div>
+
+                    <!-- 播报开关 -->
+                    <div class="checkbox-wrapper">
+                        <input type="checkbox" id="chkSpeak" v-model="speakEnabled">
+                        <label for="chkSpeak">允许语音播报</label>
+                    </div>
                 </div>
-                <div class="silent-hint" v-else-if="silentMin !== null && silentMax !== null && silentMin >= silentMax">
-                    <span style="color: #f87171;">⚠️ 最低价必须小于最高价</span>
+
+                <!-- 未设置合约时提示 -->
+                <div v-else class="price-item" style="padding: 1.2rem; opacity: 0.8;">
+                    <div style="font-size: 1.2rem;">👆 请输入合约名称开始</div>
                 </div>
-                <div class="silent-hint" v-else>
-                    设置最低价和最高价以定义静默区间
+
+                <!-- 底部控制 -->
+                <div class="bottom-controls">
+                    <button id="startBtn" @click="startBroadcast" :disabled="isBroadcasting || !currentSymbol">▶
+                        开始</button>
+                    <button id="stopBtn" @click="haltBroadcast" :disabled="!isBroadcasting">⏹️ 停止</button>
+                </div>
+
+                <!-- 状态条 -->
+                <div class="status-bar">
+                    <span><i>🔊</i> {{ statusMessage }}</span>
+                    <span class="badge">间隔 {{ intervalSeconds }}秒</span>
                 </div>
             </div>
 
-            <!-- 播报开关 -->
-            <div class="checkbox-wrapper">
-                <input type="checkbox" id="chkSpeak" v-model="speakEnabled">
-                <label for="chkSpeak">允许语音播报 (超出区间时提醒)</label>
+            <!-- 右列：区间设置 -->
+            <div class="right-column" v-if="currentSymbol">
+                <!-- 静默区间设置 -->
+                <div class="silent-area">
+                    <div class="area-title">
+                        <i>🔇</i> 静默区间
+                    </div>
+                    <div class="area-subtitle">价格在此区间内不播报</div>
+                    <div class="range-input-row">
+                        <div class="input-item">
+                            <label>最低价</label>
+                            <input type="number" step="0.00001" :min="0" placeholder="例如 0.25"
+                                v-model.number="silentMin" @change="saveSilentRange">
+                        </div>
+                        <div class="input-item">
+                            <label>最高价</label>
+                            <input type="number" step="0.00001" :min="0" placeholder="例如 0.35"
+                                v-model.number="silentMax" @change="saveSilentRange">
+                        </div>
+                    </div>
+                    <div class="silent-hint" v-if="silentMin !== null && silentMax !== null && silentMin < silentMax">
+                        <i>🔕</i> 当价格 ≥ {{ formatSilent(silentMin) }} 且 ≤ {{ formatSilent(silentMax) }} 时保持静默
+                    </div>
+                    <div class="silent-hint"
+                        v-else-if="silentMin !== null && silentMax !== null && silentMin >= silentMax">
+                        <span style="color: #f87171;">⚠️ 最低价必须小于最高价</span>
+                    </div>
+                    <div class="silent-hint" v-else>
+                        设置最低价和最高价以定义静默区间
+                    </div>
+                </div>
+
+                <!-- 时间范围设置 -->
+                <div class="time-range-area">
+                    <div class="area-title">
+                        <i>🕐</i> 时间范围
+                    </div>
+                    <div class="area-subtitle">东八区 24小时制，该时间范围内无视价格范围</div>
+                    <div class="range-input-row">
+                        <div class="input-item">
+                            <label>开始时间</label>
+                            <input type="time" v-model="timeRangeStartTime" placeholder="13:00">
+                        </div>
+                        <div class="input-item">
+                            <label>结束时间</label>
+                            <input type="time" v-model="timeRangeEndTime" placeholder="16:00">
+                        </div>
+                    </div>
+                    <div class="time-range-buttons">
+                        <button class="time-btn" @click="enableTimeRange"
+                            :disabled="!timeRangeStartTime || !timeRangeEndTime || timeRangeEnabled">
+                            ✓ 启用
+                        </button>
+                        <button class="time-btn" @click="stopTimeRange" :disabled="!timeRangeEnabled">
+                            ⏸ 停止
+                        </button>
+                    </div>
+                    <div class="time-hint" v-if="timeRangeEnabled && timeRangeStartTime && timeRangeEndTime">
+                        <i>✓</i> 时间范围已启用: {{ timeRangeStartTime }} 至 {{ timeRangeEndTime }}
+                    </div>
+                    <div class="time-hint" v-else-if="!timeRangeEnabled && timeRangeStartTime && timeRangeEndTime">
+                        <i>○</i> 时间范围已设置: {{ timeRangeStartTime }} 至 {{ timeRangeEndTime }}
+                    </div>
+                    <div class="time-hint" v-else>
+                        设置开始时间和结束时间后点击启用
+                    </div>
+                </div>
             </div>
-        </div>
-
-        <!-- 未设置合约时提示 -->
-        <div v-else class="price-item" style="padding: 1.2rem; opacity: 0.8; flex-shrink: 0;">
-            <div style="font-size: 1.2rem;">👆 请输入合约名称开始</div>
-        </div>
-
-        <!-- 底部控制 -->
-        <div class="bottom-controls">
-            <button id="startBtn" @click="startBroadcast" :disabled="isBroadcasting || !currentSymbol">▶ 开始</button>
-            <button id="stopBtn" @click="haltBroadcast" :disabled="!isBroadcasting">⏹️ 停止</button>
-        </div>
-
-        <!-- 状态条 -->
-        <div class="status-bar">
-            <span><i>🔊</i> {{ statusMessage }}</span>
-            <span class="badge">间隔 {{ intervalSeconds }}秒</span>
         </div>
 
         <!-- 设置弹窗 (语音、间隔) -->
