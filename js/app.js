@@ -311,7 +311,7 @@ function initializeApp() {
                 if (!this.speakEnabled) return false;
                 if (this.currentPrice === null) return false;
 
-                // 检查时间范围是否启用且在范围内
+                //  修复后：加上了 this.
                 if (this.timeRangeEnabled && this.timeRangeStartTime && this.timeRangeEndTime) {
                     if (this.isCurrentTimeInRange()) {
                         // 在时间范围内，忽略价格范围直接播报
